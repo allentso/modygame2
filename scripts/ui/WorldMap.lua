@@ -5,7 +5,7 @@
 local UI = require("urhox-libs/UI")
 local Widget = require("urhox-libs/UI/Core/Widget")
 local Theme = require("ui.Theme")
-local MapData = require("data.MapData")
+local MapModuleAdapter = require("map.MapModuleAdapter")
 
 local M = {}
 
@@ -18,11 +18,11 @@ local COL_STEP = HEX_W
 local ROW_STEP = HEX_H * 0.75
 
 --- 根据视口高度重算六边形常量，保证 zoom=0.5 时上下顶边
-local function recalcHexConstants(viewportH)
+local function recalcHexConstants(gridRows, viewportH)
     -- 目标: GRID_ROWS * ROW_STEP * 0.5 = viewportH
     -- ROW_STEP = 1.5 * HEX_EDGE
     -- → HEX_EDGE = viewportH / (GRID_ROWS * 1.5 * 0.5)
-    HEX_EDGE = viewportH / (MapData.GRID_ROWS * 0.75)
+    HEX_EDGE = viewportH / (gridRows * 0.75)
     HEX_W = SQRT3 * HEX_EDGE
     HEX_H = 2 * HEX_EDGE
     COL_STEP = HEX_W
@@ -92,6 +92,7 @@ function WorldMapWidget:Init(props)
     Widget.Init(self, props)
     self._state = props.gameState
     self._onPortClick = props.onPortClick
+    self._mapAdapter = props.mapAdapter or MapModuleAdapter.new()
 
     -- 视口变换（平移+缩放）
     self._panX = 0
@@ -128,12 +129,11 @@ function WorldMapWidget:Render(nvg)
     -- 首次渲染：根据视口计算 hex 大小，zoom=0.5 时上下顶边
     if not self._initialized then
         self._initialized = true
-        recalcHexConstants(lh)
+        recalcHexConstants(self._mapAdapter:GetGridRows(), lh)
 
         self._zoom = 0.5
 
-        local mapW = MapData.GRID_COLS * COL_STEP
-        local mapH = MapData.GRID_ROWS * ROW_STEP
+        local mapW = self._mapAdapter:GetGridCols() * COL_STEP
         -- 垂直居中（上下顶边）
         self._panY = 0
         -- 水平居中
@@ -165,10 +165,18 @@ function WorldMapWidget:Render(nvg)
         if colony then selectedPortId = colony.portId end
     end
 
+    local drawList = self._mapAdapter:BuildDrawList(self._state)
+    local tileDrawItems = {}
+    for _, item in ipairs(drawList) do
+        if item.kind == "tile" then
+            tileDrawItems[#tileDrawItems + 1] = item
+        end
+    end
+
     -- ═══════════════════════════════════════════════
     -- Layer 1: 色块填充六边形（地形）
     -- ═══════════════════════════════════════════════
-    for _, tile in ipairs(MapData.tiles) do
+    for _, tile in ipairs(tileDrawItems) do
         local cx, cy = hexToPixel(tile.col, tile.row)
         local sx = ox + cx * z
         local sy = oy + cy * z
@@ -178,7 +186,10 @@ function WorldMapWidget:Render(nvg)
         if sx > lx - se * 2 and sx < lx + lw + se * 2
             and sy > ly - se * 2 and sy < ly + lh + se * 2 then
 
-            local style = MapData.tileStyles[tile.type]
+            local style = self._mapAdapter:GetTileStyle(tile)
+            if tile.visibility == "hidden" then
+                style = self._mapAdapter:GetUnexploredStyle() or style
+            end
             if style then
                 local f = style.fill
                 local s_c = style.stroke
@@ -193,6 +204,12 @@ function WorldMapWidget:Render(nvg)
                 nvgStrokeColor(nvg, nvgRGBA(s_c[1], s_c[2], s_c[3], s_c[4] or 255))
                 nvgStrokeWidth(nvg, 0.8)
                 nvgStroke(nvg)
+            end
+
+            if tile.visibility == "explored" then
+                drawHex(nvg, sx, sy, se * 0.96)
+                nvgFillColor(nvg, nvgRGBA(8, 12, 18, 105))
+                nvgFill(nvg)
             end
 
             -- hover 高亮
@@ -215,9 +232,9 @@ function WorldMapWidget:Render(nvg)
     -- ═══════════════════════════════════════════════
     local effectiveEdge = HEX_EDGE * z
     if effectiveEdge > 8 then  -- 有效六边形边长足够大时才显示资源
-        for _, tile in ipairs(MapData.tiles) do
-            if tile.resource then
-                local resInfo = MapData.resourceIcons[tile.resource]
+        for _, tile in ipairs(tileDrawItems) do
+            if tile.resource and tile.visibility == "visible" then
+                local resInfo = self._mapAdapter:GetResourceIcon(tile.resource)
                 if resInfo then
                     local cx, cy = hexToPixel(tile.col, tile.row)
                     local sx = ox + cx * z
@@ -251,8 +268,8 @@ function WorldMapWidget:Render(nvg)
     -- ═══════════════════════════════════════════════
     -- Layer 3: 港口标记 — 核心交互元素
     -- ═══════════════════════════════════════════════
-    for _, tile in ipairs(MapData.tiles) do
-        if tile.portId then
+    for _, tile in ipairs(tileDrawItems) do
+        if tile.portId and tile.visibility ~= "hidden" then
             local cx, cy = hexToPixel(tile.col, tile.row)
             local sx = ox + cx * z
             local sy = oy + cy * z
@@ -343,7 +360,7 @@ end
 
 --- 获取港口的屏幕坐标
 function WorldMapWidget:GetPortScreenPos(portId, ox, oy, z)
-    local tile = MapData.GetPortTile(portId)
+    local tile = self._mapAdapter:GetPortTile(portId)
     if not tile then return 0, 0 end
     local cx, cy = hexToPixel(tile.col, tile.row)
     return ox + cx * z, oy + cy * z
@@ -351,7 +368,7 @@ end
 
 --- 绘制贸易航线
 function WorldMapWidget:DrawTradeRoutes(nvg, ox, oy, z)
-    for _, route in ipairs(MapData.tradeRoutes) do
+    for _, route in ipairs(self._mapAdapter:GetRoutes()) do
         local x1, y1 = self:GetPortScreenPos(route.from, ox, oy, z)
         local x2, y2 = self:GetPortScreenPos(route.to, ox, oy, z)
 
@@ -408,7 +425,7 @@ function WorldMapWidget:DrawLegend(nvg, lx, ly, lw, lh)
     nvgFillColor(nvg, nvgRGBA(200, 210, 230, 200))
     nvgText(nvg, legendX + 6, legendY + 4, "航线图例", nil)
 
-    for i, item in ipairs(MapData.routeLegend) do
+    for i, item in ipairs(self._mapAdapter:GetRouteLegend()) do
         local iy = legendY + 15 + (i - 1) * 12
         nvgStrokeColor(nvg, nvgRGBA(item.color[1], item.color[2], item.color[3], 255))
         nvgStrokeWidth(nvg, 2)
@@ -496,7 +513,7 @@ function WorldMapWidget:HandleClick(event)
     local mapY = (event.y - layout.y - self._panY) / self._zoom
 
     local col, row = pixelToHex(mapX, mapY)
-    local tile = MapData.GetTile(col, row)
+    local tile = self._mapAdapter:GetTile(col, row)
     if tile and tile.portId and self._onPortClick then
         self._onPortClick(tile.portId)
         return true

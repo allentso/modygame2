@@ -1,0 +1,28 @@
+{
+  "defaultTerrain": "Grassland",
+  "name": "Sample Hex Map",
+  "radius": 2,
+  "shape": "hexagon",
+  "tiles": [
+    { "x": -2, "y": -2, "terrain": "Ocean" },
+    { "x": -2, "y": -1, "terrain": "Coast" },
+    { "x": -2, "y": 0, "terrain": "Grassland", "resource": "Wheat" },
+    { "x": -1, "y": -2, "terrain": "Coast" },
+    { "x": -1, "y": -1, "terrain": "Plains" },
+    { "x": -1, "y": 0, "terrain": "Grassland", "feature": "Forest" },
+    { "x": -1, "y": 1, "terrain": "Hill" },
+    { "x": 0, "y": -2, "terrain": "Grassland" },
+    { "x": 0, "y": -1, "terrain": "Plains", "resource": "Horses" },
+    { "x": 0, "y": 0, "terrain": "Grassland", "unitId": "warrior-1" },
+    { "x": 0, "y": 1, "terrain": "Plains" },
+    { "x": 0, "y": 2, "terrain": "Coast" },
+    { "x": 1, "y": -1, "terrain": "Grassland" },
+    { "x": 1, "y": 0, "terrain": "Hill", "resource": "Iron" },
+    { "x": 1, "y": 1, "terrain": "Grassland" },
+    { "x": 1, "y": 2, "terrain": "Coast" },
+    { "x": 2, "y": 0, "terrain": "Coast" },
+    { "x": 2, "y": 1, "terrain": "Ocean" },
+    { "x": 2, "y": 2, "terrain": "Ocean" }
+  ],
+  "version": 1
+}
