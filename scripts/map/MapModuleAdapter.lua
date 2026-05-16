@@ -3,36 +3,9 @@
 -- ============================================================================
 local MapData = require("data.MapData")
 
-local function ensureMapModulePath()
-    local candidates = {
-        "map-module/?.lua",
-        "./map-module/?.lua",
-        "../map-module/?.lua",
-        "../../map-module/?.lua",
-    }
-
-    local source = debug and debug.getinfo and debug.getinfo(1, "S").source
-    if source and string.sub(source, 1, 1) == "@" then
-        local filePath = string.sub(source, 2)
-        local root = string.match(filePath, "^(.*)[/\\]scripts[/\\]map[/\\][^/\\]+$")
-        if root then
-            candidates[#candidates + 1] = root .. "/map-module/?.lua"
-            candidates[#candidates + 1] = root .. "\\map-module\\?.lua"
-        end
-    end
-
-    for _, candidate in ipairs(candidates) do
-        if not string.find(package.path, candidate, 1, true) then
-            package.path = package.path .. ";" .. candidate
-        end
-    end
-end
-
-ensureMapModulePath()
-
-local TileMap = require("tile_map")
-local FogOfWar = require("fog_of_war")
-local MapView = require("map_view")
+local TileMap = require("map-module.tile_map")
+local FogOfWar = require("map-module.fog_of_war")
+local MapView = require("map-module.map_view")
 
 local M = {}
 M.__index = M
